@@ -1,11 +1,12 @@
 import rclpy
 from rclpy.time import Time
-from math import cos, sin
+from math import cos, sin, pi
 from .pid_controller import pid_velocity_fixed_height_controller
 from geometry_msgs.msg import Twist, TransformStamped
 import tf_transformations
 from tf2_ros import TransformBroadcaster
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 
 FLYING_ATTITUDE = 1.0
 
@@ -37,6 +38,14 @@ class CrazyflieDriver:
         self.gyro.enable(timestep)
         self.camera = self.robot.getDevice("camera")
         self.camera.enable(timestep)
+        self.range_front = self.robot.getDevice("range_front")
+        self.range_front.enable(timestep)
+        self.range_left = self.robot.getDevice("range_left")
+        self.range_left.enable(timestep)
+        self.range_back = self.robot.getDevice("range_back")
+        self.range_back.enable(timestep)
+        self.range_right = self.robot.getDevice("range_right")
+        self.range_right.enable(timestep)
             
         ## Initialize variables
         self.past_x_global = 0
@@ -56,6 +65,7 @@ class CrazyflieDriver:
         self.desired_twist = Twist()
         self.odom_publisher = self.node.create_publisher(Odometry, 'odom', 10)
         self.tfbr = TransformBroadcaster(self.node)
+        self.laser_publisher = self.node.create_publisher(LaserScan, 'scan', 10)
 
     def cmd_vel_cb(self, twist):
         self.desired_twist = twist
@@ -88,10 +98,11 @@ class CrazyflieDriver:
         v_y = - v_x_global * sinyaw + v_y_global * cosyaw
 
         ## Publish odometry as a 3d robot
+        q = tf_transformations.quaternion_from_euler(roll, pitch, yaw)
         msg = Odometry()
         msg.child_frame_id = 'crazyflie'
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = self.world_tf_name
+        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.header.frame_id = 'world'
         msg.pose.pose.position.x = x_global
         msg.pose.pose.position.y = y_global
         msg.pose.pose.position.z = altitude
@@ -102,10 +113,9 @@ class CrazyflieDriver:
         self.odom_publisher.publish(msg)
 
         ## Publish tf
-        q = tf_transformations.quaternion_from_euler(roll, pitch, yaw)
         t_base = TransformStamped()
-        t_base.header.stamp = self.get_clock().now().to_msg()
-        t_base.header.frame_id = self.world_tf_name
+        t_base.header.stamp = self.node.get_clock().now().to_msg()
+        t_base.header.frame_id = 'world'
         t_base.child_frame_id = 'crazyflie'
         t_base.transform.translation.x = x_global
         t_base.transform.translation.y = y_global
@@ -115,6 +125,33 @@ class CrazyflieDriver:
         t_base.transform.rotation.z = q[2]
         t_base.transform.rotation.w = q[3]
         self.tfbr.sendTransform(t_base)
+
+        ## Publish range sensors as laser scan
+        front_range = float(self.range_front.getValue()/1000.0)
+        back_range = float(self.range_back.getValue()/1000.0)
+        left_range = float(self.range_left.getValue()/1000.0)
+        right_range = float(self.range_right.getValue()/1000.0)
+        max_range = 3.49
+        if front_range > max_range:
+            front_range = 0.0
+        if left_range > max_range:
+            left_range = 0.0
+        if right_range > max_range:
+            right_range = 0.0
+        if back_range > max_range:
+            back_range = 0.0
+        ranges = [back_range, right_range, front_range, left_range]
+
+        msg = LaserScan()
+        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.header.frame_id = 'crazyflie'
+        msg.range_min = 0.01
+        msg.range_max = 3.49
+        msg.ranges = ranges
+        msg.angle_min = -0.5 * 2* pi
+        msg.angle_max =  0.25 * 2 * pi
+        msg.angle_increment = 1.0 * pi/2
+        self.laser_publisher.publish(msg)
 
         ## Initialize values
         forward_desired = self.desired_twist.linear.x
