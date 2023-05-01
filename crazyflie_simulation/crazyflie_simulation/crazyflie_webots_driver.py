@@ -31,6 +31,8 @@ class CrazyflieDriver:
         self.gps.enable(timestep)
         self.gyro = self.robot.getDevice("gyro")
         self.gyro.enable(timestep)
+        self.camera = self.robot.getDevice("camera")
+        self.camera.enable(timestep)
             
         ## Initialize variables
         self.past_x_global = 0
