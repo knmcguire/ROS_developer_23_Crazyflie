@@ -46,6 +46,11 @@ class CrazyflieDriver:
         # Initialize the ROS node
         rclpy.init(args=None)
         self.node = rclpy.create_node('crazyflie_webots_driver')
+        self.node.create_subscription(Twist, 'cmd_vel', self.cmd_vel_cb, 1)
+        self.desired_twist = Twist()
+
+    def cmd_vel_cb(self, twist):
+        self.desired_twist = twist
 
     def step(self):
         rclpy.spin_once(self.node, timeout_sec=0)
@@ -76,9 +81,9 @@ class CrazyflieDriver:
         v_y = - v_x_global * sinyaw + v_y_global * cosyaw
 
         ## Initialize values
-        forward_desired = 0.0
-        sideways_desired = .0
-        yaw_desired = 0.0
+        forward_desired = self.desired_twist.linear.x
+        sideways_desired = self.desired_twist.linear.y
+        yaw_desired = self.desired_twist.angular.z
         height_desired = FLYING_ATTITUDE
 
         ## PID velocity controller with fixed height
