@@ -1,6 +1,30 @@
 <?xml version="1.0" ?>
 <robot name="Crazyflie">
     <webots>
+        <device reference="range_front" type="DistanceSensor">
+            <ros>
+                <topicName>/range_front</topicName>
+                <alwaysOn>true</alwaysOn>
+            </ros>
+        </device>
+        <device reference="range_back" type="DistanceSensor">
+            <ros>
+                <topicName>/range_back</topicName>
+                <alwaysOn>true</alwaysOn>
+            </ros>
+        </device>
+        <device reference="range_left" type="DistanceSensor">
+            <ros>
+                <topicName>/range_left</topicName>
+                <alwaysOn>true</alwaysOn>
+            </ros>
+        </device>
+        <device reference="range_right" type="DistanceSensor">
+            <ros>
+                <topicName>/range_right</topicName>
+                <alwaysOn>true</alwaysOn>
+            </ros>
+        </device>
         <plugin type="crazyflie_simulation.crazyflie_webots_driver.CrazyflieDriver" />
     </webots>
 </robot>
