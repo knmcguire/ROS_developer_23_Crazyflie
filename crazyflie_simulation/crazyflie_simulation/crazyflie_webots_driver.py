@@ -1,7 +1,11 @@
 import rclpy
+from rclpy.time import Time
 from math import cos, sin
 from .pid_controller import pid_velocity_fixed_height_controller
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TransformStamped
+import tf_transformations
+from tf2_ros import TransformBroadcaster
+from nav_msgs.msg import Odometry
 
 FLYING_ATTITUDE = 1.0
 
@@ -50,6 +54,8 @@ class CrazyflieDriver:
         self.node = rclpy.create_node('crazyflie_webots_driver')
         self.node.create_subscription(Twist, 'cmd_vel', self.cmd_vel_cb, 1)
         self.desired_twist = Twist()
+        self.odom_publisher = self.node.create_publisher(Odometry, 'odom', 10)
+        self.tfbr = TransformBroadcaster(self.node)
 
     def cmd_vel_cb(self, twist):
         self.desired_twist = twist
@@ -75,12 +81,40 @@ class CrazyflieDriver:
         v_x_global = (x_global - self.past_x_global)/dt
         y_global = self.gps.getValues()[1]
         v_y_global = (y_global - self.past_y_global)/dt
-
         ## Get body fixed velocities
         cosyaw = cos(yaw)
         sinyaw = sin(yaw)
         v_x = v_x_global * cosyaw + v_y_global * sinyaw
         v_y = - v_x_global * sinyaw + v_y_global * cosyaw
+
+        ## Publish odometry as a 3d robot
+        msg = Odometry()
+        msg.child_frame_id = 'crazyflie'
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.world_tf_name
+        msg.pose.pose.position.x = x_global
+        msg.pose.pose.position.y = y_global
+        msg.pose.pose.position.z = altitude
+        msg.pose.pose.orientation.x = q[0]
+        msg.pose.pose.orientation.y = q[1]
+        msg.pose.pose.orientation.z = q[2]
+        msg.pose.pose.orientation.w = q[3]
+        self.odom_publisher.publish(msg)
+
+        ## Publish tf
+        q = tf_transformations.quaternion_from_euler(roll, pitch, yaw)
+        t_base = TransformStamped()
+        t_base.header.stamp = self.get_clock().now().to_msg()
+        t_base.header.frame_id = self.world_tf_name
+        t_base.child_frame_id = 'crazyflie'
+        t_base.transform.translation.x = x_global
+        t_base.transform.translation.y = y_global
+        t_base.transform.translation.z = altitude
+        t_base.transform.rotation.x = q[0]
+        t_base.transform.rotation.y = q[1]
+        t_base.transform.rotation.z = q[2]
+        t_base.transform.rotation.w = q[3]
+        self.tfbr.sendTransform(t_base)
 
         ## Initialize values
         forward_desired = self.desired_twist.linear.x
