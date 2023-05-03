@@ -7,6 +7,7 @@ import tf_transformations
 from tf2_ros import TransformBroadcaster
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
+from rosgraph_msgs.msg import Clock
 
 FLYING_ATTITUDE = 1.0
 
@@ -66,6 +67,12 @@ class CrazyflieDriver:
         self.odom_publisher = self.node.create_publisher(Odometry, 'odom', 10)
         self.tfbr = TransformBroadcaster(self.node)
         self.laser_publisher = self.node.create_publisher(LaserScan, 'scan', 10)
+        self.clock_publisher = self.node.create_publisher(Clock, 'clock', 10)
+        self.msg_laser = LaserScan()
+        #self.node.create_timer(1.0/30.0, self.publish_laserscan_data)
+
+    def publish_laserscan_data(self):
+        self.laser_publisher.publish(self.msg_laser )
 
     def cmd_vel_cb(self, twist):
         self.desired_twist = twist
@@ -91,6 +98,7 @@ class CrazyflieDriver:
         v_x_global = (x_global - self.past_x_global)/dt
         y_global = self.gps.getValues()[1]
         v_y_global = (y_global - self.past_y_global)/dt
+
         ## Get body fixed velocities
         cosyaw = cos(yaw)
         sinyaw = sin(yaw)
@@ -102,7 +110,7 @@ class CrazyflieDriver:
         msg = Odometry()
         msg.child_frame_id = 'crazyflie'
         msg.header.stamp = self.node.get_clock().now().to_msg()
-        msg.header.frame_id = 'world'
+        msg.header.frame_id = 'odom'
         msg.pose.pose.position.x = x_global
         msg.pose.pose.position.y = y_global
         msg.pose.pose.position.z = altitude
@@ -115,7 +123,7 @@ class CrazyflieDriver:
         ## Publish tf
         t_base = TransformStamped()
         t_base.header.stamp = self.node.get_clock().now().to_msg()
-        t_base.header.frame_id = 'world'
+        t_base.header.frame_id = 'odom'
         t_base.child_frame_id = 'crazyflie'
         t_base.transform.translation.x = x_global
         t_base.transform.translation.y = y_global
@@ -142,16 +150,16 @@ class CrazyflieDriver:
             back_range = 0.0
         ranges = [back_range, right_range, front_range, left_range]
 
-        msg = LaserScan()
-        msg.header.stamp = self.node.get_clock().now().to_msg()
-        msg.header.frame_id = 'crazyflie'
-        msg.range_min = 0.01
-        msg.range_max = 3.49
-        msg.ranges = ranges
-        msg.angle_min = -0.5 * 2* pi
-        msg.angle_max =  0.25 * 2 * pi
-        msg.angle_increment = 1.0 * pi/2
-        self.laser_publisher.publish(msg)
+        self.msg_laser = LaserScan()
+        self.msg_laser.header.stamp = self.node.get_clock().now().to_msg()
+        self.msg_laser.header.frame_id = 'crazyflie'
+        self.msg_laser.range_min = 0.01
+        self.msg_laser.range_max = 3.49
+        self.msg_laser.ranges = ranges
+        self.msg_laser.angle_min = -0.5 * 2* pi
+        self.msg_laser.angle_max =  0.25 * 2 * pi
+        self.msg_laser.angle_increment = 1.0 * pi/2
+        self.laser_publisher.publish(self.msg_laser )
 
         ## Initialize values
         forward_desired = self.desired_twist.linear.x
@@ -174,3 +182,10 @@ class CrazyflieDriver:
         self.past_x_global = x_global
         self.past_y_global = y_global
 
+        # publish the current clock
+        clock_message = Clock()
+        #self.node.get_logger().info(f"webots clock {self.robot.getTime()} ")
+        #self.node.get_logger().info(f"ros clock {self.node.get_clock().now().to_msg()} ")
+
+        clock_message.clock = Time(seconds=self.robot.getTime()).to_msg()
+        self.clock_publisher.publish(clock_message)
